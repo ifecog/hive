@@ -1,0 +1,234 @@
+{
+  "agent": {
+    "id": "medication_checker",
+    "name": "Medication Interaction Checker",
+    "version": "1.0.0",
+    "description": "Accept a list of medications, research each one and all pairwise interactions, then output a concise plain-text safety brief \u2014 each med's purpose, dangerous combinations, moderate interactions to watch, and a consult-your-doctor disclaimer. No HTML. No fluff."
+  },
+  "graph": {
+    "id": "medication_checker-graph",
+    "goal_id": "medication-interaction-checker",
+    "version": "1.0.0",
+    "entry_node": "intake",
+    "entry_points": {
+      "start": "intake"
+    },
+    "pause_nodes": [],
+    "terminal_nodes": [
+      "report"
+    ],
+    "nodes": [
+      {
+        "id": "intake",
+        "name": "Medication Intake",
+        "description": "Collect the list of medications from the user and confirm before proceeding",
+        "node_type": "event_loop",
+        "input_keys": [],
+        "output_keys": [
+          "medications"
+        ],
+        "nullable_output_keys": [],
+        "input_schema": {},
+        "output_schema": {},
+        "system_prompt": "You are the intake specialist for a Medication Interaction Checker agent.\n\n**STEP 1 \u2014 Collect medications (text only, NO tool calls):**\nAsk the user to provide the list of medications they want to check. Be brief:\n\"Please list the medications you'd like to check for interactions (e.g., Warfarin, Aspirin, Metformin).\"\n\nIf the user has already provided medications in the conversation, confirm them:\n\"I'll check interactions for: [list]. Is that correct?\"\n\n**STEP 2 \u2014 After the user confirms, call set_output:**\n- set_output(\"medications\", \"<comma-separated list of medication names, e.g. Warfarin, Aspirin, Metformin>\")",
+        "tools": [],
+        "model": null,
+        "sub_agents": [],
+        "function": null,
+        "routes": {},
+        "max_retries": 3,
+        "retry_on": [],
+        "max_node_visits": 1,
+        "output_model": null,
+        "max_validation_retries": 2,
+        "client_facing": true,
+        "success_criteria": "The research brief is specific and actionable: it states the topic, the key questions to answer, the desired scope, and depth."
+      },
+      {
+        "id": "research",
+        "name": "Medication Research",
+        "description": "Research each medication individually and all pairwise interactions by scraping drug databases directly",
+        "node_type": "event_loop",
+        "input_keys": [
+          "medications"
+        ],
+        "output_keys": [
+          "med_profiles",
+          "interactions"
+        ],
+        "nullable_output_keys": [],
+        "input_schema": {},
+        "output_schema": {},
+        "system_prompt": "You are a medical research specialist. Research each medication and all pairwise interactions by scraping drug databases directly.\n\n**INPUT:** medications \u2014 a comma-separated list of medication names.\n\n**PHASE 1 \u2014 Research each medication individually:**\nFor each medication NAME (lowercase, hyphenated), scrape these URLs in order until you get content:\n1. https://www.drugs.com/{name}.html  (e.g. drugs.com/warfarin.html)\n2. https://medlineplus.gov/druginfo/meds/a{name}.html\n\nExtract: purpose (1 sentence), top 3-5 common side effects. If a URL fails, try the next.\n\n**PHASE 2 \u2014 Research pairwise interactions:**\nFor every pair (med1, med2), scrape the Drugs.com interaction checker:\nhttps://www.drugs.com/interactions-check.html?drug_list={med1},{med2}\n\nAlso try: https://www.drugs.com/drug-interactions/{med1}-{med2}.html\n\nExtract: severity (Major/Moderate/Minor/None known), mechanism (1 sentence), clinical significance (1 sentence), source URL.\n\nWork in batches of 3 web_scrape calls at a time. Skip pairs where both URLs fail and record severity as \"Could not retrieve\".\n\n**OUTPUT \u2014 call set_output in SEPARATE turns:**\n- set_output(\"med_profiles\", \"<JSON array: [{name, purpose, side_effects}]>\")\n- set_output(\"interactions\", \"<JSON array: [{drug1, drug2, severity, mechanism, significance, source_url}]>\")",
+        "tools": [
+          "web_scrape"
+        ],
+        "model": null,
+        "sub_agents": [],
+        "function": null,
+        "routes": {},
+        "max_retries": 3,
+        "retry_on": [],
+        "max_node_visits": 3,
+        "output_model": null,
+        "max_validation_retries": 2,
+        "client_facing": false,
+        "success_criteria": "Findings reference at least 3 distinct sources with URLs. Key claims are substantiated by fetched content, not generated."
+      },
+      {
+        "id": "report",
+        "name": "Safety Brief",
+        "description": "Compile and present a concise plain-text medication safety brief to the user",
+        "node_type": "event_loop",
+        "input_keys": [
+          "medications",
+          "med_profiles",
+          "interactions"
+        ],
+        "output_keys": [
+          "safety_brief"
+        ],
+        "nullable_output_keys": [],
+        "input_schema": {},
+        "output_schema": {},
+        "system_prompt": "You are a medication safety brief writer. Compile and present a concise plain-text safety brief.\n\n**STEP 1 \u2014 Present the brief (text only, NO tool calls):**\n\nFormat it exactly like this \u2014 keep every item to one sentence max:\n\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nMEDICATION SAFETY BRIEF\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nMEDICATIONS REVIEWED\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\u2022 [Med 1] \u2014 [purpose, 1 sentence]\n\u2022 [Med 2] \u2014 [purpose, 1 sentence]\n\n\u26a0\ufe0f DANGEROUS INTERACTIONS (Major)\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\u2022 [Med A] + [Med B]: [mechanism]. [significance]. Source: [url]\n(If none: \"None found.\")\n\n\u26a0\ufe0f MODERATE INTERACTIONS (Watch)\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\u2022 [Med A] + [Med C]: [mechanism]. Source: [url]\n(If none: \"None found.\")\n\n\u2139\ufe0f MINOR / NO INTERACTIONS\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\u2022 [pair]: No significant interaction found.\n\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\u2695\ufe0f DISCLAIMER: This is a research aid only. Consult a licensed pharmacist or physician before making any medication changes.\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n**STEP 2 \u2014 After presenting, call set_output:**\n- set_output(\"safety_brief\", \"<the full text of the brief>\")",
+        "tools": [],
+        "model": null,
+        "sub_agents": [],
+        "function": null,
+        "routes": {},
+        "max_retries": 3,
+        "retry_on": [],
+        "max_node_visits": 1,
+        "output_model": null,
+        "max_validation_retries": 2,
+        "client_facing": true,
+        "success_criteria": "An HTML report has been saved, the file link has been presented to the user, and the user has acknowledged receipt."
+      }
+    ],
+    "edges": [
+      {
+        "id": "intake-to-research",
+        "source": "intake",
+        "target": "research",
+        "condition": "on_success",
+        "condition_expr": null,
+        "priority": 1,
+        "input_mapping": {}
+      },
+      {
+        "id": "research-to-report",
+        "source": "research",
+        "target": "report",
+        "condition": "on_success",
+        "condition_expr": null,
+        "priority": 1,
+        "input_mapping": {}
+      }
+    ],
+    "max_steps": 100,
+    "max_retries_per_node": 3,
+    "description": "Accept a list of medications, research each one and all pairwise interactions, then output a concise plain-text safety brief \u2014 each med's purpose, dangerous combinations, moderate interactions to watch, and a consult-your-doctor disclaimer. No HTML. No fluff.",
+    "created_at": "2026-04-14T20:09:04.458401"
+  },
+  "goal": {
+    "id": "medication-interaction-checker",
+    "name": "Medication Interaction Checker",
+    "description": "Accept a list of medications, research each one and all pairwise interactions, then output a concise plain-text safety brief \u2014 each med's purpose, dangerous combinations, moderate interactions to watch, and a consult-your-doctor disclaimer. No HTML. No fluff.",
+    "status": "draft",
+    "success_criteria": [
+      {
+        "id": "sc-med-research",
+        "description": "Each medication's purpose and common side effects identified",
+        "metric": "meds_researched",
+        "type": "success_rate",
+        "target": "100%",
+        "weight": 0.2,
+        "met": false
+      },
+      {
+        "id": "sc-interaction-research",
+        "description": "All pairwise interactions researched from reputable sources",
+        "metric": "pairs_researched",
+        "type": "success_rate",
+        "target": "100%",
+        "weight": 0.3,
+        "met": false
+      },
+      {
+        "id": "sc-dangerous-flagged",
+        "description": "Dangerous (Major) interactions clearly flagged",
+        "metric": "dangerous_interactions_flagged",
+        "type": "success_rate",
+        "target": "true",
+        "weight": 0.25,
+        "met": false
+      },
+      {
+        "id": "sc-moderate-noted",
+        "description": "Moderate interactions identified and noted",
+        "metric": "moderate_interactions_noted",
+        "type": "success_rate",
+        "target": "true",
+        "weight": 0.1,
+        "met": false
+      },
+      {
+        "id": "sc-concise-brief",
+        "description": "Concise plain-text safety brief delivered in the conversation",
+        "metric": "brief_delivered",
+        "type": "success_rate",
+        "target": "true",
+        "weight": 0.15,
+        "met": false
+      }
+    ],
+    "constraints": [
+      {
+        "id": "c-no-fabrication",
+        "description": "Only report interactions found in retrieved sources \u2014 no fabrication",
+        "constraint_type": "hard",
+        "category": "accuracy",
+        "check": ""
+      },
+      {
+        "id": "c-cite-sources",
+        "description": "Cite source URLs for all flagged interactions",
+        "constraint_type": "hard",
+        "category": "accuracy",
+        "check": ""
+      },
+      {
+        "id": "c-disclaimer",
+        "description": "Always include consult-doctor disclaimer",
+        "constraint_type": "hard",
+        "category": "safety",
+        "check": ""
+      },
+      {
+        "id": "c-concise",
+        "description": "Output must be concise \u2014 no verbose explanations, straight to the point",
+        "constraint_type": "hard",
+        "category": "quality",
+        "check": ""
+      }
+    ],
+    "context": {},
+    "required_capabilities": [],
+    "input_schema": {},
+    "output_schema": {},
+    "version": "1.0.0",
+    "parent_version": null,
+    "evolution_reason": null,
+    "created_at": "2026-04-14 20:01:48.096348",
+    "updated_at": "2026-04-14 20:01:48.096348"
+  },
+  "required_tools": [
+    "web_scrape"
+  ],
+  "metadata": {
+    "created_at": "2026-04-14T20:09:04.458401",
+    "node_count": 3,
+    "edge_count": 2
+  }
+}
